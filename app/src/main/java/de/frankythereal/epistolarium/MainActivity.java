@@ -88,7 +88,13 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return !HOST.equals(request.getUrl().getHost());
+                Uri u = request.getUrl();
+                if (HOST.equals(u.getHost())) return false;
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, u));
+                } catch (Exception ignored) {
+                }
+                return true;
             }
         });
         web.addJavascriptInterface(new Bridge(), "Native");
@@ -435,6 +441,17 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 return "";
             }
+        }
+
+        @JavascriptInterface
+        public void openExternal(String url) {
+            if (url == null || !url.startsWith("https://")) return;
+            main.post(() -> {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                } catch (Exception ignored) {
+                }
+            });
         }
 
         @JavascriptInterface
