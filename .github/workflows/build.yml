@@ -27,7 +27,20 @@ jobs:
         run: echo "ANDROID_HOME=$ANDROID_HOME" && ls $ANDROID_HOME/platforms
 
       - name: APK bauen
-        run: gradle :app:assembleRelease --no-daemon
+        run: |
+          set -o pipefail
+          gradle :app:assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Build-Log bei Fehler ablegen
+        if: failure()
+        run: |
+          git config user.name "build-bot"
+          git config user.email "build-bot@users.noreply.github.com"
+          git checkout --orphan build-log
+          git rm -rf --cached . > /dev/null
+          git add -f build.log
+          git commit -m "Build-Log ${{ github.run_number }}"
+          git push -f origin build-log
 
       - name: APK umbenennen
         run: cp app/build/outputs/apk/release/app-release.apk Epistolarium.apk
