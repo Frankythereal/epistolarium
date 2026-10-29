@@ -84,7 +84,7 @@ Regeln für die Auswertung:
 - Geistesblitze: neue Einsichten, Erkenntnisse oder Ideen, die im Brief stehen.
 - Nichts dazuerfinden. Wenn es zu einer Liste nichts gibt, bleibt sie leer.
 
-Speichere das Ergebnis mit dem Werkzeug brief_speichern.`;
+Speichere das Ergebnis immer mit dem Werkzeug brief_speichern. Antworte nicht mit normalem Text.`;
   }
 
   function transcribe(letterId, settings, hint) {
@@ -93,7 +93,7 @@ Speichere das Ergebnis mit dem Werkzeug brief_speichern.`;
       max_tokens: 8000,
       system: systemPrompt(settings),
       tools: [LETTER_TOOL],
-      tool_choice: { type: 'tool', name: 'brief_speichern' },
+      tool_choice: { type: 'auto' },
       messages: [{
         role: 'user',
         content: [{ type: 'text', text: 'Bitte schreibe diesen Brief ab und werte ihn aus.' + (hint ? ' ' + hint : '') }],
@@ -108,17 +108,23 @@ Speichere das Ergebnis mit dem Werkzeug brief_speichern.`;
       max_tokens: 8000,
       system: systemPrompt(settings) + '\n\nDiesmal bekommst du den Brief schon als Text, nicht als Bild. Übernimm ihn in das Feld text und korrigiere nur Rechtschreibung und Zeichensetzung.',
       tools: [LETTER_TOOL],
-      tool_choice: { type: 'tool', name: 'brief_speichern' },
+      tool_choice: { type: 'auto' },
       messages: [{ role: 'user', content: [{ type: 'text', text: 'Hier ist der Brief:\n\n' + text }] }],
     };
     return call(body).then(toLetter);
   }
 
   function toLetter(resp) {
-    const block = (resp.content || []).find(b => b.type === 'tool_use');
-    if (!block) throw new Error('Claude hat keine Abschrift geliefert. Bitte noch einmal versuchen.');
     if (resp.stop_reason === 'max_tokens') throw new Error('Der Brief war zu lang für eine Antwort. Bitte noch einmal versuchen.');
-    const i = block.input || {};
+    const block = (resp.content || []).find(b => b.type === 'tool_use');
+    let i = block && block.input;
+    if (!i) {
+      // Falls Claude das Ergebnis als Text statt über das Werkzeug liefert
+      const txt = (resp.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+      const a = txt.indexOf('{'), z = txt.lastIndexOf('}');
+      if (a >= 0 && z > a) { try { i = JSON.parse(txt.slice(a, z + 1)); } catch (e) {} }
+    }
+    if (!i || !i.text) throw new Error('Claude hat keine Abschrift geliefert. Bitte noch einmal versuchen.');
     const arr = a => Array.isArray(a) ? a.map(x => String(x).trim()).filter(x => x && !/^keine?\.?$/i.test(x)) : [];
     return {
       date: /^\d{4}-\d{2}-\d{2}$/.test(i.datum || '') ? i.datum : '',
