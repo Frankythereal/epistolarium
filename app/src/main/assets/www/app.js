@@ -139,7 +139,7 @@
   function viewHome() {
     const q = query.trim().toLowerCase();
     const letters = S.letters.slice().sort(byDateDesc).filter(l => !q || matches(l, q));
-    let h = `<div class="brand"><h1>Epistolarium</h1><div class="sub">Briefe an dich selbst</div><div class="orn"></div></div>`;
+    let h = `<div class="brand"><img class="logo" src="logo.png" alt=""><h1>epistolarium</h1><div class="sub">Briefe an dich selbst</div></div>`;
     h += `<div class="search">${I.search}<input id="q" type="search" placeholder="In deinen Briefen suchen" value="${esc(query)}" autocomplete="off"></div>`;
 
     if (!apiKey() && !S.letters.length) {
@@ -308,7 +308,7 @@
   // ---------- Sammlung ----------
   function viewCollect() {
     const labels = { decisions: 'Entscheidungen', recommendations: 'Empfehlungen', insights: 'Geistesblitze' };
-    let h = `<div class="brand"><h1 style="font-size:36px">Sammlung</h1><div class="sub">Was deine Briefe dir sagen</div><div class="orn"></div></div>`;
+    let h = `<div class="brand"><img class="logo small" src="logo.png" alt=""><h1 style="font-size:28px;text-transform:none">Sammlung</h1><div class="sub">Was deine Briefe dir sagen</div><div class="orn"></div></div>`;
     h += `<div class="seg">${Object.keys(labels).map(k => `<button data-act="ctab" data-k="${k}" class="${collectTab === k ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>`;
     if (collectTab === 'recommendations') {
       const all = S.letters.flatMap(l => (l.recommendations || []));
@@ -356,7 +356,7 @@
     const [from, to] = rangeDates();
     const n = lettersIn(from, to).length;
     const p = (k, label) => `<button data-act="preset" data-k="${k}" class="${reviewRange.preset === k ? 'on' : ''}">${label}</button>`;
-    let h = `<div class="brand"><h1 style="font-size:36px">Rückblick</h1><div class="sub">Was sich über die Zeit zeigt</div><div class="orn"></div></div>`;
+    let h = `<div class="brand"><img class="logo small" src="logo.png" alt=""><h1 style="font-size:28px;text-transform:none">Rückblick</h1><div class="sub">Was sich über die Zeit zeigt</div><div class="orn"></div></div>`;
     h += `<div class="card"><div class="presets">${p('4w', 'Letzte 4 Wochen')}${p('3m', 'Letzte 3 Monate')}${p('y', 'Dieses Jahr')}${p('all', 'Alles')}${p('custom', 'Eigener Zeitraum')}</div>`;
     if (reviewRange.preset === 'custom') {
       h += `<div class="row"><label class="field"><span>Von</span><input class="input" type="date" id="rfrom" value="${from}"></label><label class="field"><span>Bis</span><input class="input" type="date" id="rto" value="${to}"></label></div>`;
@@ -425,7 +425,7 @@
   function viewSettings() {
     const key = apiKey();
     const s = S.settings;
-    let h = `<div class="brand"><h1 style="font-size:36px">Einstellungen</h1><div class="orn"></div></div>`;
+    let h = `<div class="brand"><img class="logo small" src="logo.png" alt=""><h1 style="font-size:28px;text-transform:none">Einstellungen</h1><div class="orn"></div></div>`;
     h += `<h3 class="section">Claude</h3><div class="card">
       <label class="field"><span>API-Schlüssel</span><input class="input" id="apikey" type="password" placeholder="sk-ant-…" value="${esc(key)}" autocomplete="off"></label>
       <div class="hint">Bekommst du in der <a href="#" data-act="ext" data-url="https://console.anthropic.com/settings/keys">Anthropic Console</a>. Er bleibt nur auf diesem Handy.</div>

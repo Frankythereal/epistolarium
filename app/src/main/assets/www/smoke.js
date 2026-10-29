@@ -49,11 +49,11 @@ void main(){
                 fbm(p*1.7 + 2.2*q + vec2(8.3, 2.8) - tt*.7 - swirl));
   float f = fbm(p*1.2 + 2.4*r + swirl*.6);
 
-  vec3 ink   = vec3(.043,.071,.125);
-  vec3 deep  = vec3(.10,.16,.27);
+  vec3 ink   = vec3(.055,.094,.16);
+  vec3 deep  = vec3(.10,.165,.28);
   vec3 mist  = vec3(.34,.41,.58);
   vec3 teal  = vec3(.16,.33,.38);
-  vec3 ember = vec3(.62,.50,.33);
+  vec3 ember = vec3(.81,.68,.40);
 
   vec3 col = mix(ink, deep, smoothstep(.2,.75,f));
   col = mix(col, teal, smoothstep(.45,.95,length(q))*.35);
