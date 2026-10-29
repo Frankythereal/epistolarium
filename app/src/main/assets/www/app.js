@@ -485,7 +485,14 @@
   function refreshHome() { if (!stack.length && tab === 'letters') render(); }
   function openReview(p) {
     stack.length = 0; tab = 'letters';
-    push({ type: 'edit', mode: p.replaces ? 'edit' : 'review', id: p.id, pages: p.pages, draft: { ...p.draft } });
+    const draft = { ...p.draft };
+    const existing = p.replaces && S.letters.find(l => l.id === p.id);
+    if (existing) {
+      const done = new Set((existing.recommendations || []).filter(r => r.done).map(r => r.text));
+      draft.recommendations = (draft.recommendations || []).map(r => ({ ...r, done: done.has(r.text) }));
+      if (!draft.date) draft.date = existing.date;
+    }
+    push({ type: 'edit', mode: p.replaces ? 'edit' : 'review', id: p.id, pages: p.pages, draft });
     if (p.replaces) {
       // Neu abgeschriebener Brief: ersetzt den bestehenden erst beim Speichern
       S.pending = S.pending.filter(x => x.id !== p.id); save();

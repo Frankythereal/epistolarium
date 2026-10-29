@@ -50,20 +50,20 @@ void main(){
   float f = fbm(p*1.2 + 2.4*r + swirl*.6);
 
   vec3 ink   = vec3(.043,.071,.125);
-  vec3 deep  = vec3(.085,.135,.235);
-  vec3 mist  = vec3(.26,.33,.48);
+  vec3 deep  = vec3(.10,.16,.27);
+  vec3 mist  = vec3(.34,.41,.58);
   vec3 teal  = vec3(.16,.33,.38);
   vec3 ember = vec3(.62,.50,.33);
 
   vec3 col = mix(ink, deep, smoothstep(.2,.75,f));
   col = mix(col, teal, smoothstep(.45,.95,length(q))*.35);
-  col = mix(col, mist, pow(smoothstep(.45,1.,f*f*1.6 + r.x*.25), 1.4)*.55);
+  col = mix(col, mist, pow(smoothstep(.45,1.,f*f*1.6 + r.x*.25), 1.4)*.7);
   col += ember * pow(max(r.y - .55, 0.), 2.) * .35;
   col += mist * glow * .06;
 
   // sanfte Vignette, damit Text gut lesbar bleibt
   float v = smoothstep(1.25, .25, length((uv - vec2(.5,.55)) * vec2(1., 1.25)));
-  col = mix(ink, col, .55 + .45*v);
+  col = mix(ink, col, .7 + .3*v);
   gl_FragColor = vec4(col, 1.);
 }`;
 

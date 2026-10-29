@@ -1,8 +1,8 @@
 // Alles rund um Claude: Prompts, Anfragen, Auswertung der Antworten.
 const Claude = (() => {
   const MODELS = {
-    'claude-opus-5-5': 'Claude Opus 5.5 – liest Handschrift am genauesten',
-    'claude-sonnet-5-5': 'Claude Sonnet 5.5 – schneller und günstiger',
+    'claude-opus-5-5': 'Opus 5.5 · am genauesten',
+    'claude-sonnet-5-5': 'Sonnet 5.5 · günstiger',
   };
 
   let seq = 0;
