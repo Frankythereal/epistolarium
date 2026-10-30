@@ -62,6 +62,9 @@ public class MainActivity extends Activity {
     private static final int REQ_EXPORT = 12;
     private static final int REQ_IMPORT = 13;
     private static final int REQ_AUTH = 14;
+    private static final int REQ_NOTIF = 15;
+    static final String ACTION_PICK_PDF = "de.frankythereal.epistolarium.PICK_PDF";
+    private boolean pendingPick = false;
     private static final long LOCK_GRACE_MS = 60_000;
 
     // App-Sperre
@@ -176,6 +179,45 @@ public class MainActivity extends Activity {
         authRunning = false;
         locked = false;
         js("window.setLocked && window.setLocked(false)");
+        if (pendingPick) {
+            pendingPick = false;
+            startPicker();
+        }
+    }
+
+    private void startPicker() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("application/pdf");
+        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        ownActivityOpen = true;
+        startActivityForResult(i, REQ_PICK_PDF);
+    }
+
+    /** Vom Widget oder der Erinnerung: direkt die PDF-Auswahl öffnen, bei Sperre erst entsperren. */
+    private void handlePickRequest() {
+        boolean mustLock = lockEnabled() && deviceSecure() && (locked
+                || (stoppedAt > 0 && SystemClock.elapsedRealtime() - stoppedAt > LOCK_GRACE_MS));
+        if (mustLock) {
+            if (!locked) {
+                locked = true;
+                js("window.setLocked && window.setLocked(true)");
+            }
+            autoPrompted = false;
+            pendingPick = true;
+            stoppedAt = 0;
+        } else {
+            main.post(this::startPicker);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_NOTIF) {
+            boolean ok = grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            js("window.onNotifPermission && window.onNotifPermission(" + ok + ")");
+        }
     }
 
     private void authFailed(String msg) {
@@ -288,6 +330,11 @@ public class MainActivity extends Activity {
 
     private void handleIntent(Intent intent) {
         String a = intent.getAction();
+        if (ACTION_PICK_PDF.equals(a)) {
+            intent.setAction(null);
+            handlePickRequest();
+            return;
+        }
         if (!Intent.ACTION_SEND.equals(a) && !Intent.ACTION_SEND_MULTIPLE.equals(a)
                 && !Intent.ACTION_VIEW.equals(a)) return;
         if (!jsReady) {
@@ -574,11 +621,34 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void pickPdfs() {
-            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            i.addCategory(Intent.CATEGORY_OPENABLE);
-            i.setType("application/pdf");
-            i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-            main.post(() -> { ownActivityOpen = true; startActivityForResult(i, REQ_PICK_PDF); });
+            main.post(MainActivity.this::startPicker);
+        }
+
+        /** Erinnerung, letzter Brief und Sprüche an Erinnerung und Widget weitergeben. */
+        @JavascriptInterface
+        public void syncState(String json) {
+            Reminder.store(MainActivity.this, json);
+            Reminder.schedule(MainActivity.this);
+            EpistolariumWidget.updateAll(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public boolean canNotify() {
+            return Reminder.canNotify(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void requestNotify() {
+            if (Build.VERSION.SDK_INT >= 33) {
+                main.post(() -> requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF));
+            } else {
+                js("window.onNotifPermission && window.onNotifPermission(true)");
+            }
+        }
+
+        @JavascriptInterface
+        public void testReminder() {
+            Reminder.notify(MainActivity.this);
         }
 
         @JavascriptInterface

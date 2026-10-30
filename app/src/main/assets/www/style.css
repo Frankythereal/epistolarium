@@ -133,7 +133,9 @@ nav { transition: transform .35s cubic-bezier(.2, .8, .2, 1); }
 
 .paper { background: #F4EEE2; color: #2B2620; border-radius: 6px; padding: 30px 24px 34px; box-shadow: 0 20px 60px rgba(0, 0, 0, .35); font-family: var(--serif); font-size: 20px; line-height: 32px; white-space: pre-wrap; position: relative; }
 .paper::before { content: ''; position: absolute; inset: 0; border-radius: 6px; background-image: linear-gradient(rgba(60, 80, 120, .06) 1px, transparent 1px); background-size: 100% 32px; background-position: 0 55px; background-origin: border-box; background-clip: border-box; top: 0; bottom: 34px; pointer-events: none; }
-.paper .unsure { background: rgba(217, 140, 92, .22); border-radius: 3px; }
+.paper .unsure { background: rgba(232, 150, 60, .32); border-radius: 3px; box-shadow: inset 0 -2px 0 #D9822B; padding: 0 1px; }
+.paper .unsure.flash { animation: flash 1.4s ease; }
+@keyframes flash { 0%, 100% { background: rgba(232, 150, 60, .32); } 30% { background: rgba(232, 150, 60, .75); } }
 
 .seg { display: flex; background: var(--glass); border: 1px solid var(--line); border-radius: 14px; padding: 4px; gap: 4px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 .seg button { flex: 1; border: none; background: none; border-radius: 10px; padding: 9px 4px; font-size: 13.5px; color: var(--paper-2); }
@@ -224,3 +226,26 @@ body.locked #app, body.locked nav, body.locked .toast, body.locked .sheet, body.
 @keyframes breathe { 0%, 100% { box-shadow: 0 0 0 0 rgba(207, 174, 103, .0); } 50% { box-shadow: 0 0 0 12px rgba(207, 174, 103, .08); } }
 #lock .hint-lock { color: var(--paper-3); font-size: 13px; margin-top: 16px; }
 #lock .lock-msg { color: var(--rose); font-size: 13.5px; margin-top: 10px; min-height: 20px; }
+
+/* ---------- Unsichere Stellen ---------- */
+.unsure-chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(232, 150, 60, .5); background: rgba(232, 150, 60, .14); color: #F0B27A; border-radius: 18px; padding: 8px 14px; font-size: 13.5px; font-weight: 500; margin-bottom: 14px; }
+.unsure-chip svg { width: 16px; height: 16px; }
+.unsure-bar { margin-top: 10px; min-height: 8px; }
+.unsure-bar .unsure-chip { margin: 0; }
+.ok-small { color: var(--sage); font-size: 13.5px; }
+.warn .btn.small { display: flex; margin-top: 10px; padding: 8px 14px; font-size: 13.5px; background: rgba(229, 167, 154, .15); color: var(--rose); border-color: rgba(229, 167, 154, .35); }
+.hl-wrap { position: relative; background: rgba(8, 14, 26, .55); border-radius: 12px; }
+.hl-wrap .hl-back, .hl-wrap .hl-text { font-family: var(--serif); font-size: 18px; line-height: 1.5; letter-spacing: normal; padding: 12px 14px; border-width: 1px; white-space: pre-wrap; overflow-wrap: break-word; word-wrap: break-word; margin: 0; }
+.hl-wrap .hl-back { position: absolute; inset: 0; color: transparent; background: none; border-color: transparent; pointer-events: none; overflow: hidden; }
+.hl-wrap .hl-back mark { color: transparent; padding: 0; background: rgba(232, 150, 60, .38); box-shadow: inset 0 -2px 0 #D9822B; border-radius: 3px; }
+.hl-wrap .hl-text { position: relative; display: block; background: transparent; resize: none; overflow: hidden; }
+.hl-wrap .hl-text::selection { background: rgba(207, 174, 103, .45); }
+
+/* ---------- Gedanke für heute ---------- */
+.inspire { margin-top: 18px; padding: 20px; }
+.inspire .q { font-family: var(--serif); font-style: italic; font-size: 20px; line-height: 1.45; color: var(--paper); }
+.inspire .qa { font-family: var(--display); font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--paper-3); margin-top: 8px; }
+.inspire .imp { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; font-size: 14.5px; color: var(--paper-2); }
+.inspire .imp span { display: block; font-family: var(--display); font-size: 10.5px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px; }
+.inspire .due { display: inline-block; font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: .08em; color: #14110A; background: var(--gold-grad); border-radius: 12px; padding: 5px 11px; margin-bottom: 14px; }
+.inspire .due.soft { background: var(--gold-soft); color: var(--gold); }
