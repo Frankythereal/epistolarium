@@ -249,3 +249,11 @@ body.locked #app, body.locked nav, body.locked .toast, body.locked .sheet, body.
 .inspire .imp span { display: block; font-family: var(--display); font-size: 10.5px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px; }
 .inspire .due { display: inline-block; font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: .08em; color: #14110A; background: var(--gold-grad); border-radius: 12px; padding: 5px 11px; margin-bottom: 14px; }
 .inspire .due.soft { background: var(--gold-soft); color: var(--gold); }
+
+/* ---------- Sicherung ---------- */
+.backup-state { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(156, 195, 180, .10); border: 1px solid rgba(156, 195, 180, .25); color: var(--paper-2); font-size: 13.5px; line-height: 1.55; }
+.backup-state b { color: var(--paper); font-weight: 500; }
+.backup-state.bad { background: rgba(229, 167, 154, .12); border-color: rgba(229, 167, 154, .3); color: var(--rose); }
+.steps { margin: 0 0 14px; padding-left: 22px; color: var(--paper-2); }
+.steps li { margin-bottom: 8px; }
+.steps b { color: var(--paper); font-weight: 500; }

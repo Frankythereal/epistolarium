@@ -63,6 +63,7 @@ public class MainActivity extends Activity {
     private static final int REQ_IMPORT = 13;
     private static final int REQ_AUTH = 14;
     private static final int REQ_NOTIF = 15;
+    private static final int REQ_AUTO = 16;
     static final String ACTION_PICK_PDF = "de.frankythereal.epistolarium.PICK_PDF";
     private boolean pendingPick = false;
     private static final long LOCK_GRACE_MS = 60_000;
@@ -488,20 +489,24 @@ public class MainActivity extends Activity {
         } else if (requestCode == REQ_EXPORT) {
             Uri target = data.getData();
             io.execute(() -> {
-                try (OutputStream os = getContentResolver().openOutputStream(target);
-                     ZipOutputStream zip = new ZipOutputStream(os)) {
-                    if (dataFile().exists()) addToZip(zip, dataFile(), "data.json");
-                    File[] letters = lettersDir().listFiles();
-                    if (letters != null) for (File d : letters) {
-                        File[] files = d.listFiles();
-                        if (files != null) for (File f : files)
-                            addToZip(zip, f, "letters/" + d.getName() + "/" + f.getName());
-                    }
+                try {
+                    writeBackup(target);
                     js("window.onBackupDone(true)");
                 } catch (Exception e) {
                     js("window.onBackupDone(false)");
                 }
             });
+        } else if (requestCode == REQ_AUTO) {
+            Uri target = data.getData();
+            try {
+                getContentResolver().takePersistableUriPermission(target,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            } catch (Exception ignored) {
+                // Manche Anbieter erlauben keine dauerhafte Freigabe; dann merkt es die nächste Sicherung
+            }
+            autoPrefs().edit().putString("autoUri", target.toString()).putString("autoName", displayName(target))
+                    .remove("autoError").apply();
+            runAutoBackup();
         } else if (requestCode == REQ_IMPORT) {
             Uri src = data.getData();
             io.execute(() -> {
@@ -517,6 +522,8 @@ public class MainActivity extends Activity {
                         if (e.getName().equals("data.json")) {
                             sawData = true;
                             out = new File(getFilesDir(), "restore.json");
+                        } else if (!e.getName().startsWith("letters/") || out.exists()) {
+                            continue; // nur Briefe, und vorhandene Dateien nie überschreiben
                         }
                         out.getParentFile().mkdirs();
                         try (FileOutputStream fo = new FileOutputStream(out)) {
@@ -527,11 +534,68 @@ public class MainActivity extends Activity {
                             ? new String(readAll(new FileInputStream(new File(getFilesDir(), "restore.json"))), StandardCharsets.UTF_8)
                             : "null";
                     new File(getFilesDir(), "restore.json").delete();
+                    rerenderMissingPages();
                     js("window.onBackupRestored(" + JSONObject.quote(restored) + ")");
                 } catch (Exception ex) {
                     js("window.onNativeError(" + JSONObject.quote("Sicherung konnte nicht gelesen werden.") + ")");
                 }
             });
+        }
+    }
+
+    // ---------- Sicherung (manuell und automatisch, z. B. nach Google Drive) ----------
+
+    private SharedPreferences autoPrefs() {
+        return getSharedPreferences("backup", Context.MODE_PRIVATE);
+    }
+
+    /** Schreibt data.json und die Original-PDFs. Die Seitenbilder werden beim Wiederherstellen neu erzeugt. */
+    private void writeBackup(Uri target) throws IOException {
+        OutputStream os;
+        try {
+            os = getContentResolver().openOutputStream(target, "wt");
+        } catch (Exception e) {
+            os = getContentResolver().openOutputStream(target, "w");
+        }
+        if (os == null) throw new IOException("Ziel nicht beschreibbar");
+        try (ZipOutputStream zip = new ZipOutputStream(os)) {
+            if (dataFile().exists()) addToZip(zip, dataFile(), "data.json");
+            File[] letters = lettersDir().listFiles();
+            if (letters != null) for (File d : letters) {
+                File pdf = new File(d, "original.pdf");
+                if (pdf.exists()) addToZip(zip, pdf, "letters/" + d.getName() + "/original.pdf");
+            }
+        }
+    }
+
+    private void runAutoBackup() {
+        String u = autoPrefs().getString("autoUri", "");
+        if (u.isEmpty()) return;
+        io.execute(() -> {
+            try {
+                writeBackup(Uri.parse(u));
+                long now = System.currentTimeMillis();
+                autoPrefs().edit().putLong("autoLast", now).remove("autoError").apply();
+                js("window.onAutoBackup && window.onAutoBackup(true)");
+            } catch (Exception e) {
+                autoPrefs().edit().putString("autoError", "Sicherung nach Drive hat nicht geklappt. Bist du online? Sonst Ziel neu wählen.").apply();
+                js("window.onAutoBackup && window.onAutoBackup(false)");
+            }
+        });
+    }
+
+    /** Fehlende Seitenbilder nach einer Wiederherstellung neu erzeugen. */
+    private void rerenderMissingPages() {
+        File[] letters = lettersDir().listFiles();
+        if (letters == null) return;
+        for (File d : letters) {
+            File pdf = new File(d, "original.pdf");
+            if (pdf.exists() && !new File(d, "p1.jpg").exists()) {
+                try {
+                    renderPages(pdf, d);
+                } catch (Exception ignored) {
+                }
+            }
         }
     }
 
@@ -644,6 +708,48 @@ public class MainActivity extends Activity {
             } else {
                 js("window.onNotifPermission && window.onNotifPermission(true)");
             }
+        }
+
+        @JavascriptInterface
+        public void chooseAutoBackup() {
+            Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("application/zip");
+            i.putExtra(Intent.EXTRA_TITLE, "Epistolarium-Sicherung.zip");
+            main.post(() -> { ownActivityOpen = true; startActivityForResult(i, REQ_AUTO); });
+        }
+
+        @JavascriptInterface
+        public void autoBackupNow() {
+            runAutoBackup();
+        }
+
+        @JavascriptInterface
+        public String getAutoBackup() {
+            try {
+                SharedPreferences p = autoPrefs();
+                JSONObject o = new JSONObject();
+                o.put("on", !p.getString("autoUri", "").isEmpty());
+                o.put("name", p.getString("autoName", ""));
+                o.put("last", p.getLong("autoLast", 0));
+                o.put("error", p.getString("autoError", ""));
+                return o.toString();
+            } catch (Exception e) {
+                return "{}";
+            }
+        }
+
+        @JavascriptInterface
+        public void disableAutoBackup() {
+            String u = autoPrefs().getString("autoUri", "");
+            if (!u.isEmpty()) {
+                try {
+                    getContentResolver().releasePersistableUriPermission(Uri.parse(u),
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                } catch (Exception ignored) {
+                }
+            }
+            autoPrefs().edit().clear().apply();
         }
 
         @JavascriptInterface

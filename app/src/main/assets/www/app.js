@@ -26,7 +26,41 @@
     try { ok = hasNative ? Native.saveData(json) : (localStorage.setItem('epistolarium', json), true); } catch (e) { ok = false; }
     if (ok === false) toast('Speichern hat nicht geklappt!');
     syncNative();
+    if (hasNative && Native.getAutoBackup) maybeAutoBackup();
   }
+  function autoBackupInfo() {
+    try { return hasNative && Native.getAutoBackup ? JSON.parse(Native.getAutoBackup()) : {}; } catch (e) { return {}; }
+  }
+  function fmtWhen(ms) {
+    const t = new Date(ms), now = new Date();
+    const time = t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    if (t.toDateString() === now.toDateString()) return 'heute, ' + time + ' Uhr';
+    const y = new Date(now); y.setDate(now.getDate() - 1);
+    if (t.toDateString() === y.toDateString()) return 'gestern, ' + time + ' Uhr';
+    return t.toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + time + ' Uhr';
+  }
+  // Nur sichern, wenn sich Briefe oder Rückblicke wirklich geändert haben
+  let contentSig = null, backupTimer = null;
+  function sig() {
+    const str = JSON.stringify([S.letters, S.reviews]);
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+    return str.length + ':' + h;
+  }
+  function maybeAutoBackup() {
+    const now = sig();
+    if (contentSig === null) { contentSig = now; return; }
+    if (now === contentSig) return;
+    contentSig = now;
+    if (!autoBackupInfo().on) return;
+    clearTimeout(backupTimer);
+    backupTimer = setTimeout(() => Native.autoBackupNow(), 8000);
+  }
+  window.onAutoBackup = ok => {
+    if (!ok) toast('Sicherung nach Drive hat nicht geklappt.', 4000);
+    if (tab === 'settings' && !stack.length) render();
+  };
+
   function lastLetterDate() { return S.letters.map(l => l.date).filter(Boolean).sort().pop() || ''; }
   function syncNative() {
     if (!hasNative || !Native.syncState) return;
@@ -171,7 +205,8 @@
         <div class="month" style="margin-top:0">Willkommen</div>
         <p style="margin:0 0 10px">Scanne einen Brief mit Adobe Scan und teile das PDF mit Epistolarium. Claude schreibt ihn ab und ordnet ihn für dich ein.</p>
         <p class="muted" style="margin:0 0 16px">Dafür brauchst du einmalig einen API-Schlüssel von Anthropic.</p>
-        <button class="btn primary block" data-act="tab" data-tab="settings">Schlüssel eintragen</button></div>`;
+        <button class="btn primary block" data-act="tab" data-tab="settings">Schlüssel eintragen</button>
+        <button class="btn block" style="margin-top:10px" data-act="import">Sicherung importieren</button></div>`;
     }
 
     if (!q && (S.letters.length || apiKey())) {
@@ -202,7 +237,7 @@
 
     if (!letters.length) {
       if (q) h += `<div class="empty"><div class="big">Nichts gefunden</div><p>Kein Brief enthält „${esc(query)}“.</p></div>`;
-      else if (!S.pending.length) h += `<div class="empty"><div class="big">Noch keine Briefe</div><p>Tippe auf das Plus, um deinen ersten Brief abzulegen.</p><p class="muted">Oder teile ein PDF direkt aus Adobe Scan.</p></div>`;
+      else if (!S.pending.length) h += `<div class="empty"><div class="big">Noch keine Briefe</div><p>Tippe auf das Plus, um deinen ersten Brief abzulegen.</p><p class="muted">Oder teile ein PDF direkt aus Adobe Scan.</p><button class="btn" style="margin-top:14px" data-act="import">Sicherung importieren</button></div>`;
       return h;
     }
 
@@ -489,10 +524,17 @@
       <button class="switch ${lockOn ? 'on' : ''}" data-act="lock" aria-label="Sperre mit Fingerabdruck"></button></div></div>`;
     h += `<h3 class="section">Darstellung</h3><div class="card"><div class="toggle"><div><b style="font-weight:500">Ruhiger Modus</b><div class="muted" style="font-size:13px">Langsamerer Rauch, weniger Effekte, schont den Akku</div></div>
       <button class="switch ${s.calm ? 'on' : ''}" data-act="calm" aria-label="Ruhiger Modus"></button></div></div>`;
+    const ab = autoBackupInfo();
     h += `<h3 class="section">Sicherung</h3><div class="card">
-      <p style="margin:0 0 14px" class="muted">Alle Briefe, Originale und Rückblicke in einer Datei. Speichere sie ab und zu, zum Beispiel in Google Drive.</p>
-      <div class="row"><button class="btn" data-act="export">Sicherung speichern</button><button class="btn" data-act="import">Wiederherstellen</button></div></div>`;
-    h += `<p class="muted center" style="font-size:12.5px;margin-top:30px">Epistolarium · ${S.letters.length} ${S.letters.length === 1 ? 'Brief' : 'Briefe'}<br>Deine Briefe werden nur zum Abschreiben an Claude geschickt und sonst nirgendwo gespeichert.</p>`;
+      <div class="toggle"><div><b style="font-weight:500">Automatisch in Google Drive sichern</b><div class="muted" style="font-size:13px">Nach jeder Änderung, mit allen Briefen und Originalen</div></div>
+      <button class="switch ${ab.on ? 'on' : ''}" data-act="autoBackup" aria-label="Automatische Sicherung"></button></div>
+      ${ab.on ? `<div class="backup-state ${ab.error ? 'bad' : ''}">${ab.error ? esc(ab.error)
+        : `Datei: <b>${esc(ab.name || 'Epistolarium-Sicherung.zip')}</b><br>Zuletzt gesichert: ${ab.last ? fmtWhen(ab.last) : 'noch nie'}`}</div>
+        <div class="row" style="margin-top:12px"><button class="btn" data-act="autoNow" id="autoNowBtn">Jetzt sichern</button><button class="btn" data-act="autoPick">Ordner ändern</button></div>` : ''}
+      <div style="border-top:1px solid var(--line);margin:18px 0 14px"></div>
+      <p style="margin:0 0 14px" class="muted">Von Hand sichern oder eine Sicherung importieren, zum Beispiel aus Google Drive auf ein neues Handy. Beim Import kommen nur fehlende Briefe dazu, nichts wird überschrieben.</p>
+      <div class="row"><button class="btn" data-act="export">Sicherung speichern</button><button class="btn" data-act="import">Importieren</button></div></div>`;
+    h += `<p class="muted center" style="font-size:12.5px;margin-top:30px">Epistolarium · ${S.letters.length} ${S.letters.length === 1 ? 'Brief' : 'Briefe'}<br>Deine Briefe gehen nur zum Abschreiben an Claude${ab.on ? ' und als Sicherung in dein Google Drive' : ''}.</p>`;
     return h;
   }
 
@@ -571,7 +613,7 @@
       const rids = new Set(S.reviews.map(r => r.id));
       (d.reviews || []).forEach(r => { if (!rids.has(r.id)) S.reviews.push(r); });
       save(); go('letters');
-      toast(added ? `${added} ${added === 1 ? 'Brief' : 'Briefe'} wiederhergestellt` : 'Alle Briefe waren schon da');
+      toast(added ? `${added} ${added === 1 ? 'Brief' : 'Briefe'} importiert` : 'Alle Briefe waren schon da');
     } catch (e) { toast('Sicherung konnte nicht gelesen werden.'); }
   };
 
@@ -646,6 +688,16 @@
     $('#orig', sh).onclick = () => viewer(p.id, p.pages);
     $('#drop', sh).onclick = () => { closeOverlay(); discardPending(p.id); };
   }
+  function drivePickSheet() {
+    if (!hasNative) return;
+    const sh = sheet(`<h3>Sicherung in Google Drive</h3>
+      <p>Gleich öffnet sich die Dateiauswahl. So wählst du den Ordner:</p>
+      <ol class="steps"><li>Oben links auf das Menü <b>☰</b> tippen</li><li><b>Drive</b> wählen und in deinen Wunsch-Ordner gehen. Mit dem Ordner-Symbol oben kannst du auch einen neuen anlegen.</li><li>Unten auf <b>Speichern</b> tippen</li></ol>
+      <p class="muted" style="font-size:13px">Danach sichert die App nach jeder Änderung von selbst in diesen Ordner. Du brauchst dafür die Google-Drive-App auf dem Handy.</p>
+      <button class="btn primary block" id="go">Ordner auswählen</button>`);
+    $('#go', sh).onclick = () => { closeOverlay(); Native.chooseAutoBackup(); };
+  }
+
   function discardPending(id) {
     confirmSheet('Abschrift verwerfen?', 'Das gescannte PDF wird ebenfalls gelöscht.', 'Verwerfen', () => {
       S.pending = S.pending.filter(x => x.id !== id);
@@ -814,10 +866,25 @@
         Native.requestNotify();
         break;
       }
+      case 'autoBackup': {
+        if (autoBackupInfo().on) {
+          confirmSheet('Automatische Sicherung ausschalten?', 'Die Datei in Google Drive bleibt erhalten, wird aber nicht mehr aktualisiert.', 'Ausschalten', () => { Native.disableAutoBackup(); render(); toast('Automatische Sicherung ist aus'); });
+          break;
+        }
+        drivePickSheet();
+        break;
+      }
+      case 'autoPick': drivePickSheet(); break;
+      case 'autoNow': {
+        const b = $('#autoNowBtn');
+        if (b) { b.disabled = true; b.innerHTML = '<span class="spinner light"></span> Sichert …'; }
+        Native.autoBackupNow();
+        break;
+      }
       case 'testReminder': if (hasNative) { Native.testReminder(); toast('Test-Erinnerung gesendet'); } break;
       case 'unlock': $('#lockMsg').textContent = ''; if (hasNative) Native.unlock(); break;
       case 'export': if (hasNative) Native.exportBackup('Epistolarium-Sicherung-' + today() + '.zip'); break;
-      case 'import': if (hasNative) Native.importBackup(); break;
+      case 'import': if (hasNative) { Native.importBackup(); } break;
     }
   });
 
@@ -865,6 +932,7 @@
   applyCalm();
   render();
   syncNative();
+  contentSig = sig();
   if (hasNative) Native.ready();
   processQueue();
   window.__S = () => S; // für Tests
