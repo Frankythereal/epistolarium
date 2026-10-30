@@ -210,3 +210,17 @@ select.input { appearance: none; -webkit-appearance: none; }
 .muted { color: var(--paper-3); }
 .center { text-align: center; }
 a { color: var(--gold); }
+
+/* ---------- Sperre ---------- */
+#lock { display: none; }
+body.locked #lock { display: flex; position: fixed; inset: 0; z-index: 100; align-items: center; justify-content: center; text-align: center; padding: 24px; animation: fade .4s ease; }
+body.locked #app, body.locked nav, body.locked .toast, body.locked .sheet, body.locked .sheet-bg, body.locked .viewer { visibility: hidden; }
+#lock .logo { width: 104px; display: block; margin: 0 auto 18px; filter: drop-shadow(0 6px 22px rgba(207, 174, 103, .2)); }
+#lock h1 { font-family: var(--display); font-weight: 500; font-size: 36px; margin: 0; }
+#lock .sub { font-family: var(--display); font-weight: 500; color: var(--gold); font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; margin-top: 10px; }
+#lock .fp { width: 84px; height: 84px; border-radius: 50%; border: 1px solid rgba(207, 174, 103, .45); background: var(--glass); color: var(--gold); margin: 56px auto 0; display: grid; place-items: center; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); animation: breathe 3.2s ease-in-out infinite; }
+#lock .fp svg { width: 40px; height: 40px; }
+#lock .fp:active { transform: scale(.95); }
+@keyframes breathe { 0%, 100% { box-shadow: 0 0 0 0 rgba(207, 174, 103, .0); } 50% { box-shadow: 0 0 0 12px rgba(207, 174, 103, .08); } }
+#lock .hint-lock { color: var(--paper-3); font-size: 13px; margin-top: 16px; }
+#lock .lock-msg { color: var(--rose); font-size: 13.5px; margin-top: 10px; min-height: 20px; }

@@ -106,6 +106,7 @@
   function pop() { stack.pop(); dirty = false; render(); }
 
   window.handleBack = () => {
+    if (document.body.classList.contains('locked')) return false;
     if (closeOverlay()) return true;
     if (stack.length) {
       const top = stack[stack.length - 1];
@@ -437,6 +438,9 @@
       <label class="field"><span>Namen, die vorkommen können</span><input class="input" id="snames" value="${esc((s.names || []).join(', '))}"></label>
       <div class="hint">Hilft Claude, Namen in deiner Handschrift richtig zu lesen. Durch Komma getrennt.</div>
       <button class="btn" data-act="saveNames">Speichern</button></div>`;
+    const lockOn = hasNative && Native.getLockEnabled() && Native.canLock();
+    h += `<h3 class="section">Datenschutz</h3><div class="card"><div class="toggle"><div><b style="font-weight:500">Sperre mit Fingerabdruck</b><div class="muted" style="font-size:13px">Beim Öffnen und nach einer Minute im Hintergrund. Klappt der Fingerabdruck nicht, geht auch deine PIN.</div></div>
+      <button class="switch ${lockOn ? 'on' : ''}" data-act="lock" aria-label="Sperre mit Fingerabdruck"></button></div></div>`;
     h += `<h3 class="section">Darstellung</h3><div class="card"><div class="toggle"><div><b style="font-weight:500">Ruhiger Modus</b><div class="muted" style="font-size:13px">Langsamerer Rauch, weniger Effekte, schont den Akku</div></div>
       <button class="switch ${s.calm ? 'on' : ''}" data-act="calm" aria-label="Ruhiger Modus"></button></div></div>`;
     h += `<h3 class="section">Sicherung</h3><div class="card">
@@ -719,6 +723,15 @@
         save(); toast('Gespeichert'); break;
       case 'calm':
         S.settings.calm = !S.settings.calm; save(); applyCalm(); render(); break;
+      case 'lock': {
+        if (!hasNative) break;
+        const want = !(Native.getLockEnabled() && Native.canLock());
+        if (want && !Native.canLock()) { toast('Richte zuerst in den Android-Einstellungen eine Displaysperre mit Fingerabdruck oder PIN ein.', 5000); break; }
+        Native.setLockEnabled(want);
+        toast(want ? 'Sperre ist an' : 'Sperre ist aus');
+        render(); break;
+      }
+      case 'unlock': $('#lockMsg').textContent = ''; if (hasNative) Native.unlock(); break;
       case 'export': if (hasNative) Native.exportBackup('Epistolarium-Sicherung-' + today() + '.zip'); break;
       case 'import': if (hasNative) Native.importBackup(); break;
     }
@@ -729,7 +742,21 @@
     if (window.Smoke) window.Smoke.setCalm(S.settings.calm);
   }
 
+  // ---------- Sperre ----------
+  const lockEl = document.createElement('div');
+  lockEl.id = 'lock';
+  lockEl.innerHTML = `<div class="lock-inner"><img class="logo" src="logo.png" alt=""><h1>epistolarium</h1><div class="sub">Deine Briefe sind geschützt</div>
+    <button class="fp" data-act="unlock" aria-label="Entsperren"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11v3a8 8 0 0 0 1.5 4.6"/><path d="M8.5 9.5A3.5 3.5 0 0 1 15.5 11v2a12 12 0 0 0 .8 4.2"/><path d="M6 17.5A10 10 0 0 1 5 13v-2a7 7 0 0 1 11.6-5.3"/><path d="M19 9.2c.6 1.1 1 2.4 1 3.8v.5"/><path d="M9 21a14 14 0 0 1-1.5-6.5V11"/></svg></button>
+    <div class="hint-lock">Zum Entsperren tippen</div><div id="lockMsg" class="lock-msg"></div></div>`;
+  document.body.append(lockEl);
+  window.setLocked = v => {
+    document.body.classList.toggle('locked', !!v);
+    if (v) { closeOverlay(); $('#lockMsg').textContent = ''; }
+  };
+  window.onUnlockFailed = msg => { $('#lockMsg').textContent = msg || ''; };
+
   // ---------- Start ----------
+  if (hasNative && Native.isLocked()) window.setLocked(true);
   load();
   applyCalm();
   render();

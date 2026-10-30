@@ -11,7 +11,13 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
+import android.app.KeyguardManager;
+import android.hardware.biometrics.BiometricManager;
+import android.hardware.biometrics.BiometricPrompt;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.CancellationSignal;
+import android.os.SystemClock;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
@@ -55,6 +61,15 @@ public class MainActivity extends Activity {
     private static final int REQ_PICK_PDF = 11;
     private static final int REQ_EXPORT = 12;
     private static final int REQ_IMPORT = 13;
+    private static final int REQ_AUTH = 14;
+    private static final long LOCK_GRACE_MS = 60_000;
+
+    // App-Sperre
+    private boolean locked = false;
+    private boolean authRunning = false;
+    private boolean ownActivityOpen = false;
+    private boolean autoPrompted = false;
+    private long stoppedAt = 0;
     private static final int MAX_EDGE = 1568;
 
     private WebView web;
@@ -99,6 +114,8 @@ public class MainActivity extends Activity {
         });
         web.addJavascriptInterface(new Bridge(), "Native");
         setContentView(web);
+        locked = lockEnabled() && deviceSecure();
+        applyPrivacy();
         web.loadUrl(BASE + "index.html");
         if (getIntent() != null) handleIntent(getIntent());
     }
@@ -110,9 +127,117 @@ public class MainActivity extends Activity {
         handleIntent(intent);
     }
 
+    // ---------- App-Sperre ----------
+
+    private boolean lockEnabled() {
+        return getSharedPreferences("settings", Context.MODE_PRIVATE).getBoolean("lock", true);
+    }
+
+    private boolean deviceSecure() {
+        KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        return km != null && km.isDeviceSecure();
+    }
+
+    private void applyPrivacy() {
+        // Vorschau in "Zuletzt verwendet" ausblenden, Screenshots bleiben möglich
+        if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(!lockEnabled());
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (ownActivityOpen) {
+            ownActivityOpen = false;
+        } else if (stoppedAt > 0 && !locked && lockEnabled() && deviceSecure()
+                && SystemClock.elapsedRealtime() - stoppedAt > LOCK_GRACE_MS) {
+            locked = true;
+            autoPrompted = false;
+            js("window.setLocked && window.setLocked(true)");
+        }
+        stoppedAt = 0;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (locked && !authRunning && !autoPrompted) {
+            autoPrompted = true;
+            authenticate();
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (!ownActivityOpen && !authRunning) stoppedAt = SystemClock.elapsedRealtime();
+    }
+
+    private void unlocked() {
+        authRunning = false;
+        locked = false;
+        js("window.setLocked && window.setLocked(false)");
+    }
+
+    private void authFailed(String msg) {
+        authRunning = false;
+        js("window.onUnlockFailed && window.onUnlockFailed(" + JSONObject.quote(msg == null ? "" : msg) + ")");
+    }
+
+    @SuppressWarnings("deprecation")
+    private void authenticate() {
+        if (authRunning) return;
+        if (!deviceSecure()) {
+            // Keine Displaysperre mehr eingerichtet: nicht aussperren
+            unlocked();
+            return;
+        }
+        authRunning = true;
+        if (Build.VERSION.SDK_INT >= 28) {
+            BiometricPrompt.Builder b = new BiometricPrompt.Builder(this)
+                    .setTitle("Epistolarium entsperren")
+                    .setSubtitle("Deine Briefe sind geschützt");
+            if (Build.VERSION.SDK_INT >= 30) {
+                b.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK
+                        | BiometricManager.Authenticators.DEVICE_CREDENTIAL);
+            } else {
+                b.setDeviceCredentialAllowed(true);
+            }
+            try {
+                b.build().authenticate(new CancellationSignal(), getMainExecutor(),
+                        new BiometricPrompt.AuthenticationCallback() {
+                            @Override
+                            public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                                unlocked();
+                            }
+
+                            @Override
+                            public void onAuthenticationError(int errorCode, CharSequence errString) {
+                                boolean cancelled = errorCode == BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED
+                                        || errorCode == BiometricPrompt.BIOMETRIC_ERROR_CANCELED;
+                                authFailed(cancelled ? "" : String.valueOf(errString));
+                            }
+                        });
+            } catch (Exception e) {
+                authFailed("Entsperren nicht möglich: " + e.getMessage());
+            }
+        } else {
+            KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+            Intent i = km.createConfirmDeviceCredentialIntent("Epistolarium entsperren", "Deine Briefe sind geschützt");
+            if (i == null) {
+                unlocked();
+                return;
+            }
+            startActivityForResult(i, REQ_AUTH);
+        }
+    }
+
     @SuppressWarnings("deprecation")
     @Override
     public void onBackPressed() {
+        if (locked) {
+            moveTaskToBack(true);
+            return;
+        }
         web.evaluateJavascript("window.handleBack ? window.handleBack() : false", value -> {
             if (!"true".equals(value)) MainActivity.super.onBackPressed();
         });
@@ -295,6 +420,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_AUTH) {
+            if (resultCode == RESULT_OK) unlocked();
+            else authFailed("");
+            return;
+        }
         if (resultCode != RESULT_OK || data == null) {
             js("window.onPickerCancelled && window.onPickerCancelled()");
             return;
@@ -371,6 +501,34 @@ public class MainActivity extends Activity {
     private class Bridge {
 
         @JavascriptInterface
+        public boolean isLocked() {
+            return locked;
+        }
+
+        @JavascriptInterface
+        public void unlock() {
+            main.post(MainActivity.this::authenticate);
+        }
+
+        @JavascriptInterface
+        public boolean getLockEnabled() {
+            return lockEnabled();
+        }
+
+        @JavascriptInterface
+        public boolean canLock() {
+            return deviceSecure();
+        }
+
+        @JavascriptInterface
+        public boolean setLockEnabled(boolean on) {
+            if (on && !deviceSecure()) return false;
+            getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putBoolean("lock", on).apply();
+            main.post(MainActivity.this::applyPrivacy);
+            return true;
+        }
+
+        @JavascriptInterface
         public void ready() {
             main.post(() -> {
                 jsReady = true;
@@ -420,7 +578,7 @@ public class MainActivity extends Activity {
             i.addCategory(Intent.CATEGORY_OPENABLE);
             i.setType("application/pdf");
             i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-            main.post(() -> startActivityForResult(i, REQ_PICK_PDF));
+            main.post(() -> { ownActivityOpen = true; startActivityForResult(i, REQ_PICK_PDF); });
         }
 
         @JavascriptInterface
@@ -460,7 +618,7 @@ public class MainActivity extends Activity {
             i.addCategory(Intent.CATEGORY_OPENABLE);
             i.setType("application/zip");
             i.putExtra(Intent.EXTRA_TITLE, fileName);
-            main.post(() -> startActivityForResult(i, REQ_EXPORT));
+            main.post(() -> { ownActivityOpen = true; startActivityForResult(i, REQ_EXPORT); });
         }
 
         @JavascriptInterface
@@ -469,7 +627,7 @@ public class MainActivity extends Activity {
             i.addCategory(Intent.CATEGORY_OPENABLE);
             i.setType("*/*");
             i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/zip", "application/x-zip-compressed", "application/octet-stream"});
-            main.post(() -> startActivityForResult(i, REQ_IMPORT));
+            main.post(() -> { ownActivityOpen = true; startActivityForResult(i, REQ_IMPORT); });
         }
 
         /**
