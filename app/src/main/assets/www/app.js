@@ -281,7 +281,7 @@
       ${l.mood ? `<div class="mood">${esc(l.mood)}</div>` : ''}
       ${(l.themes || []).length ? `<div class="chips" style="margin-top:14px">${l.themes.map(t => `<span class="chip">${esc(t)}</span>`).join('')}</div>` : ''}</div>`;
 
-    if (l.summary) h += `<div class="note"><div class="note-label">Zusammenfassung</div><div class="handwriting">${esc(l.summary)}</div></div>`;
+    if (l.summary) h += `<div class="card"><div class="summary">${esc(l.summary)}</div></div>`;
     h += listSection('Entscheidungen', l, 'decisions');
     h += listSection('Empfehlungen', l, 'recommendations');
     h += listSection('Geistesblitze', l, 'insights');
@@ -297,7 +297,7 @@
       h += `<div class="pages">${Array.from({ length: l.pages }, (_, i) => `<img src="${pageUrl(l.id, i + 1)}" data-act="viewer" data-id="${l.id}" loading="lazy" alt="Seite ${i + 1}">`).join('')}</div>`;
     } else {
       if (l.uncertain) h += `<button class="unsure-chip" data-act="jumpUnsure">${I.warnSmall} ${l.uncertain} unsichere ${l.uncertain === 1 ? 'Stelle' : 'Stellen'} · zeigen</button>`;
-      h += `<div class="paper selectable">${highlightUnsure(l.text || '')}</div>`;
+      h += `<div class="paper selectable ${S.settings.hand === false ? '' : 'hand'}">${highlightUnsure(l.text || '')}</div>`;
       if (l.uncertain) h += `<p class="muted center" style="font-size:13px;margin-top:12px">${l.uncertain} unsichere ${l.uncertain === 1 ? 'Stelle ist' : 'Stellen sind'} markiert. Über den Stift oben kannst du sie korrigieren.</p>`;
     }
     h += `<div class="actions">${l.pages && hasNative ? `<button class="btn" data-act="redo" data-id="${l.id}">${I.redo} Neu abschreiben</button>` : ''}
@@ -700,7 +700,8 @@
     const lockOn = hasNative && Native.getLockEnabled() && Native.canLock();
     h += `<h3 class="section">Datenschutz</h3><div class="card"><div class="toggle"><div><b style="font-weight:500">Sperre mit Fingerabdruck</b><div class="muted" style="font-size:13px">Beim Öffnen und nach einer Minute im Hintergrund. Klappt der Fingerabdruck nicht, geht auch deine PIN.</div></div>
       <button class="switch ${lockOn ? 'on' : ''}" data-act="lock" aria-label="Sperre mit Fingerabdruck"></button></div></div>`;
-    h += `<h3 class="section">Darstellung</h3><div class="card"><div class="toggle"><div><b style="font-weight:500">Ruhiger Modus</b><div class="muted" style="font-size:13px">Langsamerer Rauch, weniger Effekte, schont den Akku</div></div>
+    h += `<h3 class="section">Darstellung</h3><div class="card"><div class="toggle" style="margin-bottom:16px"><div><b style="font-weight:500">Abschrift in Handschrift</b><div class="muted" style="font-size:13px">Dein Brief erscheint in Schreibschrift auf kariertem Papier</div></div>
+      <button class="switch ${s.hand === false ? '' : 'on'}" data-act="hand" aria-label="Abschrift in Handschrift"></button></div><div class="toggle"><div><b style="font-weight:500">Ruhiger Modus</b><div class="muted" style="font-size:13px">Langsamerer Rauch, weniger Effekte, schont den Akku</div></div>
       <button class="switch ${s.calm ? 'on' : ''}" data-act="calm" aria-label="Ruhiger Modus"></button></div></div>`;
     const ab = autoBackupInfo();
     h += `<h3 class="section">Sicherung</h3><div class="card">
@@ -1014,6 +1015,8 @@
         S.settings.name = $('#sname').value.trim() || 'Franky';
         S.settings.names = $('#snames').value.split(/[,;]/).map(s => s.trim()).filter(Boolean);
         save(); toast('Gespeichert'); break;
+      case 'hand':
+        S.settings.hand = S.settings.hand === false; save(); render(); break;
       case 'calm':
         S.settings.calm = !S.settings.calm; save(); applyCalm(); render(); break;
       case 'lock': {

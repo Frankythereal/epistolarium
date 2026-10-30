@@ -3,7 +3,7 @@
 @font-face { font-family: 'Cormorant'; src: url(fonts/cormorant-garamond-latin-600-normal.woff2) format('woff2'); font-weight: 600; font-style: normal; font-display: swap; }
 @font-face { font-family: 'Cormorant'; src: url(fonts/cormorant-garamond-latin-400-italic.woff2) format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
 @font-face { font-family: 'Cormorant'; src: url(fonts/cormorant-garamond-latin-500-italic.woff2) format('woff2'); font-weight: 500; font-style: italic; font-display: swap; }
-@font-face { font-family: 'Dancing'; src: url(fonts/dancing-script-latin-wght-normal.woff2) format('woff2'); font-weight: 400 700; font-display: swap; }
+@font-face { font-family: 'Hand'; src: url(fonts/homemade-apple-latin-400-normal.woff2) format('woff2'); font-weight: 400; font-display: swap; }
 @font-face { font-family: 'Montserrat'; src: url(fonts/montserrat-latin-wght-normal.woff2) format('woff2'); font-weight: 100 900; font-display: swap; }
 @font-face { font-family: 'Inter'; src: url(fonts/inter-latin-wght-normal.woff2) format('woff2'); font-weight: 100 900; font-display: swap; }
 
@@ -261,11 +261,6 @@ body.locked #app, body.locked nav, body.locked .toast, body.locked .sheet, body.
 
 .view > .gear { position: absolute; top: 18px; right: 16px; z-index: 2; }
 
-/* ---------- Handschriftliche Zusammenfassung ---------- */
-.note { position: relative; background: #F4EEE2; border-radius: 6px; padding: 22px 22px 24px; box-shadow: 0 18px 50px rgba(0, 0, 0, .35); transform: rotate(-.6deg); margin: 4px 2px 8px; }
-.note::before { content: ''; position: absolute; inset: 0; border-radius: 6px; pointer-events: none; background-image: linear-gradient(rgba(60, 80, 140, .10) 1px, transparent 1px), linear-gradient(90deg, rgba(60, 80, 140, .10) 1px, transparent 1px); background-size: 20px 20px; }
-.note-label { position: relative; font-family: var(--display); font-size: 10px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; color: #9A7A3A; margin-bottom: 8px; }
-.handwriting { position: relative; font-family: 'Dancing', cursive; font-size: 25px; line-height: 1.38; color: #22357A; font-weight: 500; }
 
 /* ---------- Ziele ---------- */
 .lvl { display: inline-block; font-family: var(--display); font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; padding: 4px 9px; border-radius: 10px; }
@@ -299,3 +294,7 @@ body.locked #app, body.locked nav, body.locked .toast, body.locked .sheet, body.
 .g-next.done { color: var(--sage); }
 .lvl-border-success { border-color: rgba(207, 174, 103, .5); }
 .btn svg { flex: none; }
+
+/* ---------- Abschrift in Handschrift ---------- */
+.paper.hand { font-family: 'Hand', cursive; font-size: 19px; line-height: 2.05; color: #22357A; padding: 26px 20px 30px; }
+.paper.hand::before { background-image: linear-gradient(rgba(60, 80, 140, .10) 1px, transparent 1px), linear-gradient(90deg, rgba(60, 80, 140, .10) 1px, transparent 1px); background-size: 20px 20px; background-position: 0 0; bottom: 0; }
