@@ -53,10 +53,24 @@ const Claude = (() => {
         entscheidungen: { type: 'array', items: { type: 'string' }, description: 'Nur ausdrücklich getroffene Entscheidungen. Leer, wenn es keine gibt.' },
         empfehlungen: { type: 'array', items: { type: 'string' }, description: 'Ratschläge, die der Brief gibt.' },
         geistesblitze: { type: 'array', items: { type: 'string' }, description: 'Neue Einsichten oder Ideen aus dem Brief.' },
+        ziele: {
+          type: 'array',
+          description: 'Ziele, Visionen und Vorhaben, die im Brief genannt werden. Leer, wenn es keine gibt.',
+          items: {
+            type: 'object',
+            properties: {
+              ziel: { type: 'string', description: 'Das Ziel kurz und positiv formuliert, höchstens 10 Wörter.' },
+              deadline: { type: 'string', description: 'Termin im Format JJJJ-MM-TT, nur wenn im Brief ein Zeitpunkt genannt wird, sonst leer.' },
+              plan: { type: 'string', description: 'Der Weg dorthin, nur wenn er im Brief beschrieben wird, sonst leer. Schritte durch Zeilenumbruch getrennt.' },
+              aktion: { type: 'string', description: 'Eine konkrete nächste Handlung, nur wenn der Brief sie nennt, sonst leer.' },
+            },
+            required: ['ziel', 'deadline', 'plan', 'aktion'],
+          },
+        },
         text: { type: 'string', description: 'Vollständiger Brieftext mit Absätzen (Leerzeile dazwischen).' },
         unsicher: { type: 'integer', description: 'Anzahl der Stellen, die mit [?] markiert wurden.' },
       },
-      required: ['datum', 'titel', 'stimmung', 'themen', 'zusammenfassung', 'entscheidungen', 'empfehlungen', 'geistesblitze', 'text', 'unsicher'],
+      required: ['datum', 'titel', 'stimmung', 'themen', 'zusammenfassung', 'entscheidungen', 'empfehlungen', 'geistesblitze', 'ziele', 'text', 'unsicher'],
     },
   };
 
@@ -82,6 +96,7 @@ Regeln für die Auswertung:
 - Entscheidungen: nur was ausdrücklich beschlossen wird ("ich habe entschieden", "ich werde", "ab jetzt"). "Ich glaube, es wäre gut ..." ist eine Empfehlung, keine Entscheidung.
 - Empfehlungen: Ratschläge, die der Brief ${name} gibt, kurz und in eigenen Worten.
 - Geistesblitze: neue Einsichten, Erkenntnisse oder Ideen, die im Brief stehen.
+- Ziele: Visionen, Wünsche und Vorhaben für die Zukunft ("ich will", "mein Ziel", "ich möchte erreichen"). Deadline, Plan und Aktion nur eintragen, wenn sie wirklich im Brief stehen. Nichts ergänzen, die App hilft später beim Vervollständigen.
 - Nichts dazuerfinden. Wenn es zu einer Liste nichts gibt, bleibt sie leer.
 
 Speichere das Ergebnis immer mit dem Werkzeug brief_speichern. Antworte nicht mit normalem Text.`;
@@ -135,6 +150,7 @@ Speichere das Ergebnis immer mit dem Werkzeug brief_speichern. Antworte nicht mi
       decisions: arr(i.entscheidungen).map(text => ({ text })),
       recommendations: arr(i.empfehlungen).map(text => ({ text, done: false })),
       insights: arr(i.geistesblitze).map(text => ({ text })),
+      goals: toGoals(i.ziele),
       text: (i.text || '').trim(),
       uncertain: (String(i.text || '').match(/\[\?\]/g) || []).length,
     };
@@ -167,6 +183,97 @@ Schreib in kurzen Absätzen, Aufzählungen mit "- ". Insgesamt höchstens 450 W�
       messages: [{ role: 'user', content: [{ type: 'text', text: `Zeitraum: ${from} bis ${to}\n\n${corpus}` }] }],
     };
     return call(body).then(resp => (resp.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim());
+  }
+
+  function toGoals(list) {
+    if (!Array.isArray(list)) return [];
+    const okDate = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '';
+    return list.filter(g => g && String(g.ziel || '').trim()).map(g => ({
+      title: String(g.ziel).trim(), deadline: okDate(g.deadline), plan: String(g.plan || '').trim(), action: String(g.aktion || '').trim(),
+    }));
+  }
+
+  // Werkzeug-Antwort lesen; falls Claude stattdessen JSON als Text schickt, das nehmen
+  function toolInput(resp) {
+    if (resp.stop_reason === 'max_tokens') throw new Error('Die Antwort war zu lang. Bitte noch einmal versuchen.');
+    const block = (resp.content || []).find(b => b.type === 'tool_use');
+    if (block && block.input) return block.input;
+    const txt = (resp.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+    const a = txt.indexOf('{'), z = txt.lastIndexOf('}');
+    if (a >= 0 && z > a) { try { return JSON.parse(txt.slice(a, z + 1)); } catch (e) {} }
+    throw new Error('Claude hat keine verwertbare Antwort geliefert. Bitte noch einmal versuchen.');
+  }
+
+  // ---------- Ziele ----------
+
+  const PLAN_TOOL = {
+    name: 'plan_speichern',
+    description: 'Speichert einen Plan und die nächste Aktion für ein Ziel.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        deadline_vorschlag: { type: 'string', description: 'Nur wenn noch keine Deadline existiert: ein realistischer Termin JJJJ-MM-TT. Sonst leer.' },
+        plan: { type: 'array', items: { type: 'string' }, description: '3 bis 6 klare Etappen, jeweils ein kurzer Satz.' },
+        aktion: { type: 'string', description: 'Die eine nächste Aktion: konkret, in 15 bis 60 Minuten machbar, sofort startbar.' },
+        hinweis: { type: 'string', description: 'Ein ermutigender Satz in der Du-Form, höchstens 25 Wörter.' },
+      },
+      required: ['deadline_vorschlag', 'plan', 'aktion', 'hinweis'],
+    },
+  };
+
+  function suggestPlan(goal, context, settings) {
+    const name = settings.name || 'Franky';
+    const body = {
+      model: settings.model,
+      max_tokens: 2000,
+      system: `Du hilfst ${name}, aus einem Ziel einen Erfolg zu machen. Seine Formel: Ziel + Deadline + Plan + Aktion = Erfolg. Ziel + Deadline + Plan = Strategie. Ziel + Deadline = Vorhaben. Ziel ohne Deadline = Fantasie.
+Ergänze, was fehlt, und behalte, was schon da ist. Sprich ihn mit "du" an, auf Deutsch, klar und bodenständig. Heute ist der ${new Date().toISOString().slice(0, 10)}. Speichere das Ergebnis mit dem Werkzeug plan_speichern.`,
+      tools: [PLAN_TOOL],
+      tool_choice: { type: 'auto' },
+      messages: [{ role: 'user', content: [{ type: 'text', text:
+        `Ziel: ${goal.title}\nDeadline: ${goal.deadline || 'noch keine'}\nBisheriger Plan: ${goal.plan || 'noch keiner'}\nBisherige Aktion: ${goal.action || 'noch keine'}` +
+        (context ? `\n\nAus seinem Brief dazu:\n${context.slice(0, 4000)}` : '') }] }],
+    };
+    return call(body).then(resp => {
+      const i = toolInput(resp);
+      return {
+        deadline: /^\d{4}-\d{2}-\d{2}$/.test(i.deadline_vorschlag || '') ? i.deadline_vorschlag : '',
+        plan: (Array.isArray(i.plan) ? i.plan : String(i.plan || '').split('\n')).map(x => String(x).trim()).filter(Boolean).join('\n'),
+        action: String(i.aktion || '').trim(),
+        hint: String(i.hinweis || '').trim(),
+      };
+    });
+  }
+
+  const GOALS_TOOL = {
+    name: 'ziele_speichern',
+    description: 'Speichert Ziele, die in den Briefen vorkommen.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ziele: { type: 'array', items: { type: 'object', properties: {
+          brief_datum: { type: 'string', description: 'Datum des Briefes, aus dem das Ziel stammt.' },
+          ziel: { type: 'string' }, deadline: { type: 'string' }, plan: { type: 'string' }, aktion: { type: 'string' },
+        }, required: ['brief_datum', 'ziel', 'deadline', 'plan', 'aktion'] } },
+      },
+      required: ['ziele'],
+    },
+  };
+
+  function extractGoals(letters, settings) {
+    const corpus = letters.map(l => `<brief datum="${l.date}">\n${l.text}\n</brief>`).join('\n\n');
+    const body = {
+      model: settings.model,
+      max_tokens: 4000,
+      system: `Finde in den Briefen von ${settings.name || 'Franky'} alle Ziele, Visionen und Vorhaben für die Zukunft. Ziel kurz und positiv formulieren, höchstens 10 Wörter. Deadline (JJJJ-MM-TT), Plan und Aktion nur eintragen, wenn sie wirklich im Brief stehen, sonst leer lassen. Keine Ratschläge oder Gefühle als Ziel ausgeben. Gibt es keine Ziele, ist die Liste leer. Speichere mit dem Werkzeug ziele_speichern.`,
+      tools: [GOALS_TOOL],
+      tool_choice: { type: 'auto' },
+      messages: [{ role: 'user', content: [{ type: 'text', text: corpus }] }],
+    };
+    return call(body).then(resp => {
+      const i = toolInput(resp);
+      return (i.ziele || []).map(g => ({ ...toGoals([g])[0], letterDate: g.brief_datum })).filter(g => g.title);
+    });
   }
 
   function ping(settings) {
@@ -224,5 +331,5 @@ Schreib in kurzen Absätzen, Aufzählungen mit "- ". Insgesamt höchstens 450 W�
     return isNaN(x) || x.getFullYear() < 1990 || x.getFullYear() > 2100 ? '' : d;
   }
 
-  return { MODELS, transcribe, analyzeText, review, ping, parseBriefFormat, dateFromFileName };
+  return { MODELS, transcribe, analyzeText, review, ping, parseBriefFormat, dateFromFileName, suggestPlan, extractGoals };
 })();

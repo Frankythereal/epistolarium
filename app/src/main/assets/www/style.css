@@ -3,6 +3,7 @@
 @font-face { font-family: 'Cormorant'; src: url(fonts/cormorant-garamond-latin-600-normal.woff2) format('woff2'); font-weight: 600; font-style: normal; font-display: swap; }
 @font-face { font-family: 'Cormorant'; src: url(fonts/cormorant-garamond-latin-400-italic.woff2) format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
 @font-face { font-family: 'Cormorant'; src: url(fonts/cormorant-garamond-latin-500-italic.woff2) format('woff2'); font-weight: 500; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Dancing'; src: url(fonts/dancing-script-latin-wght-normal.woff2) format('woff2'); font-weight: 400 700; font-display: swap; }
 @font-face { font-family: 'Montserrat'; src: url(fonts/montserrat-latin-wght-normal.woff2) format('woff2'); font-weight: 100 900; font-display: swap; }
 @font-face { font-family: 'Inter'; src: url(fonts/inter-latin-wght-normal.woff2) format('woff2'); font-weight: 100 900; font-display: swap; }
 
@@ -257,3 +258,44 @@ body.locked #app, body.locked nav, body.locked .toast, body.locked .sheet, body.
 .steps { margin: 0 0 14px; padding-left: 22px; color: var(--paper-2); }
 .steps li { margin-bottom: 8px; }
 .steps b { color: var(--paper); font-weight: 500; }
+
+.view > .gear { position: absolute; top: 18px; right: 16px; z-index: 2; }
+
+/* ---------- Handschriftliche Zusammenfassung ---------- */
+.note { position: relative; background: #F4EEE2; border-radius: 6px; padding: 22px 22px 24px; box-shadow: 0 18px 50px rgba(0, 0, 0, .35); transform: rotate(-.6deg); margin: 4px 2px 8px; }
+.note::before { content: ''; position: absolute; inset: 0; border-radius: 6px; pointer-events: none; background-image: linear-gradient(rgba(60, 80, 140, .10) 1px, transparent 1px), linear-gradient(90deg, rgba(60, 80, 140, .10) 1px, transparent 1px); background-size: 20px 20px; }
+.note-label { position: relative; font-family: var(--display); font-size: 10px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; color: #9A7A3A; margin-bottom: 8px; }
+.handwriting { position: relative; font-family: 'Dancing', cursive; font-size: 25px; line-height: 1.38; color: #22357A; font-weight: 500; }
+
+/* ---------- Ziele ---------- */
+.lvl { display: inline-block; font-family: var(--display); font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; padding: 4px 9px; border-radius: 10px; }
+.lvl-fantasy { background: rgba(178, 168, 230, .16); color: #C4BBF0; }
+.lvl-intent { background: rgba(141, 180, 217, .16); color: #A9CBEA; }
+.lvl-strategy { background: rgba(156, 195, 180, .16); color: var(--sage); }
+.lvl-success { background: var(--gold-grad); color: #14110A; }
+.formula .f-head { display: flex; justify-content: space-between; align-items: center; font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .04em; }
+.formula .f-head .muted { font-family: var(--sans); font-weight: 400; font-size: 12.5px; letter-spacing: 0; }
+.f-rows { margin-top: 14px; display: grid; gap: 9px; }
+.f-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.f-parts { display: flex; gap: 4px; flex: 1; min-width: 0; }
+.f-p { flex: 1; text-align: center; font-size: 11px; padding: 6px 0; border-radius: 8px; background: rgba(207, 174, 103, .18); color: var(--paper); white-space: nowrap; overflow: hidden; }
+.f-p.off { background: rgba(242, 235, 221, .04); border: 1px dashed rgba(242, 235, 221, .14); }
+.f-row .lvl { width: 88px; text-align: center; flex: none; }
+.goal { margin-top: 12px; }
+.goal.is-done { opacity: .7; }
+.g-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.g-dl { font-size: 12.5px; color: var(--paper-3); text-align: right; }
+.g-dl .late { color: var(--rose); }
+.g-title { font-family: var(--display); font-weight: 600; font-size: 16.5px; line-height: 1.3; margin: 10px 0 12px; }
+.track { display: flex; gap: 6px; }
+.track .tr { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.track .tr i { height: 5px; border-radius: 3px; background: rgba(242, 235, 221, .12); }
+.track .tr.on i { background: var(--gold-grad); }
+.track .tr span { font-size: 11px; color: var(--paper-3); text-align: center; }
+.track .tr.on span { color: var(--paper-2); }
+.track.big .tr i { height: 8px; }
+.g-next { margin-top: 12px; font-size: 13.5px; color: var(--paper-2); border-top: 1px solid var(--line); padding-top: 10px; }
+.g-next b { color: var(--gold); font-weight: 500; }
+.g-next.done { color: var(--sage); }
+.lvl-border-success { border-color: rgba(207, 174, 103, .5); }
+.btn svg { flex: none; }

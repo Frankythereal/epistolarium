@@ -5,7 +5,7 @@
   // ---------- Speicher ----------
   const hasNative = typeof window.Native !== 'undefined';
   const DEFAULT_SETTINGS = { name: 'Franky', names: ['Rebecca', 'Daniel'], model: 'claude-opus-5-5', calm: false, reminder: { on: false, days: 14, time: '19:00' } };
-  let S = { version: 1, letters: [], pending: [], reviews: [], settings: { ...DEFAULT_SETTINGS } };
+  let S = { version: 1, letters: [], pending: [], reviews: [], goals: [], settings: { ...DEFAULT_SETTINGS } };
 
   function load() {
     let raw = '';
@@ -19,6 +19,7 @@
     // Abschriften, die beim letzten Schließen noch liefen, neu anstoßen
     S.pending.forEach(p => { if (p.status === 'working') p.status = 'queued'; });
     if (!S.settings.reminder) S.settings.reminder = { on: false, days: 14, time: '19:00' };
+    if (!Array.isArray(S.goals)) S.goals = [];
   }
   function save() {
     const json = JSON.stringify(S);
@@ -118,7 +119,9 @@
     decision: '<svg class="dot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4h11l-2 4 2 4H5"/></svg>',
     insight: '<svg class="dot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>',
     seal: '<svg class="quill" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="16" cy="16" r="10"/><circle cx="16" cy="16" r="6"/></svg>',
- warnSmall: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4.5M12 17.5v.3"/></svg>',
+    goals: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg>',
+    sparkle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg>',
+    warnSmall: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4.5M12 17.5v.3"/></svg>',
     warn: '<svg class="quill" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M16 5 3 27h26z"/><path d="M16 13v7M16 24v.5"/></svg>',
   };
 
@@ -137,9 +140,10 @@
     document.body.classList.toggle('sub-open', !!top);
     let html;
     if (top) {
-      html = `<div class="view sub">${({ letter: viewLetter, edit: viewEdit, reviewText: viewReviewText })[top.type](top)}</div>`;
+      html = `<div class="view sub">${({ letter: viewLetter, edit: viewEdit, reviewText: viewReviewText, goal: viewGoal })[top.type](top)}</div>`;
     } else {
-      html = `<div class="view">${({ letters: viewHome, collect: viewCollect, review: viewReview, settings: viewSettings })[tab]()}</div>`;
+      const gear = tab === 'settings' ? '' : `<button class="iconbtn gear" data-tab="settings" aria-label="Einstellungen">${I.settings}</button>`;
+      html = `<div class="view">${gear}${({ letters: viewHome, goals: viewGoals, collect: viewCollect, review: viewReview, settings: viewSettings })[tab]()}</div>`;
     }
     const keepScroll = app.firstElementChild && app.dataset.key === key();
     const scroll = keepScroll ? app.firstElementChild.scrollTop : 0;
@@ -153,9 +157,9 @@
 
   function renderNav() {
     const b = (id, label) => `<button data-tab="${id}" class="${tab === id ? 'on' : ''}">${I[id]}<span>${label}</span></button>`;
-    $('#nav').innerHTML = b('letters', 'Briefe') + b('collect', 'Sammlung') +
+    $('#nav').innerHTML = b('letters', 'Briefe') + b('goals', 'Ziele') +
       `<button class="add" data-act="add" aria-label="Brief hinzufügen">${I.plus}</button>` +
-      b('review', 'Rückblick') + b('settings', 'Einstellungen');
+      b('collect', 'Sammlung') + b('review', 'Rückblick');
   }
 
   function go(t) { tab = t; stack.length = 0; render(); }
@@ -167,7 +171,7 @@
     if (closeOverlay()) return true;
     if (stack.length) {
       const top = stack[stack.length - 1];
-      if (top.type === 'edit' && dirty) {
+      if ((top.type === 'edit' || top.type === 'goal') && dirty) {
         confirmSheet('Änderungen verwerfen?', 'Was du hier geändert hast, geht verloren.', 'Verwerfen', () => pop());
         return true;
       }
@@ -194,6 +198,14 @@
     return esc(part).replace(new RegExp('(' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'), '<mark>$1</mark>');
   }
 
+  function goalNudge() {
+    const open = S.goals.filter(g => g.status !== 'done' && goalLevel(g).key !== 'success');
+    if (!open.length) return '';
+    const g = open[Math.floor(Date.now() / 86400000) % open.length];
+    const lv = goalLevel(g);
+    return `<div class="imp" data-act="openGoal" data-id="${g.id}"><span>Dein Ziel</span>„${esc(g.title)}“ ist noch ${lv.key === 'intent' ? 'ein' : 'eine'} ${lv.name}. <b style="color:var(--gold);font-weight:500">${lv.next} ›</b></div>`;
+  }
+
   function viewHome() {
     const q = query.trim().toLowerCase();
     const letters = S.letters.slice().sort(byDateDesc).filter(l => !q || matches(l, q));
@@ -217,7 +229,7 @@
       if (left !== null) status = left <= 0 ? '<div class="due">Zeit für einen neuen Brief</div>'
         : `<div class="due soft">Nächster Brief ${left === 1 ? 'morgen' : 'in ' + left + ' Tagen'}</div>`;
       h += `<div class="card inspire">${status}<div class="q">„${esc(qd.t)}“</div>${qd.a ? `<div class="qa">${esc(qd.a)}</div>` : ''}
-        <div class="imp"><span>${pr.own ? 'Aus deinen Briefen' : 'Impuls für deinen Brief'}</span>${esc(pr.text)}</div></div>`;
+        <div class="imp"><span>${pr.own ? 'Aus deinen Briefen' : 'Impuls für deinen Brief'}</span>${esc(pr.text)}</div>${goalNudge()}</div>`;
     }
 
     if (S.pending.length && !q) {
@@ -269,10 +281,15 @@
       ${l.mood ? `<div class="mood">${esc(l.mood)}</div>` : ''}
       ${(l.themes || []).length ? `<div class="chips" style="margin-top:14px">${l.themes.map(t => `<span class="chip">${esc(t)}</span>`).join('')}</div>` : ''}</div>`;
 
-    if (l.summary) h += `<div class="card"><div class="summary">${esc(l.summary)}</div></div>`;
+    if (l.summary) h += `<div class="note"><div class="note-label">Zusammenfassung</div><div class="handwriting">${esc(l.summary)}</div></div>`;
     h += listSection('Entscheidungen', l, 'decisions');
     h += listSection('Empfehlungen', l, 'recommendations');
     h += listSection('Geistesblitze', l, 'insights');
+    const lg = S.goals.filter(g => g.letterId === l.id);
+    if (lg.length) h += `<h3 class="section">Ziele &amp; Visionen</h3><div class="card"><ul class="items">${lg.map(g => {
+      const lv = goalLevel(g);
+      return `<li data-act="openGoal" data-id="${g.id}">${I.goals.replace('<svg', '<svg class="dot"')}<div class="txt">${esc(g.title)}<div class="meta"><span class="lvl lvl-${lv.key}">${lv.name}</span></div></div></li>`;
+    }).join('')}</ul></div>`;
 
     h += `<h3 class="section">Der Brief</h3>`;
     if (l.pages) h += `<div class="seg" style="margin-bottom:14px"><button data-act="mode" data-mode="text" class="${mode === 'text' ? 'on' : ''}">Abschrift</button><button data-act="mode" data-mode="pdf" class="${mode === 'pdf' ? 'on' : ''}">Original</button></div>`;
@@ -370,15 +387,176 @@
       S.letters.push({ ...data, id: page.id, pages: page.pages || 0, createdAt: now, updatedAt: now });
     }
     S.pending = S.pending.filter(p => p.id !== page.id);
+    const newGoals = addGoals(data.goals || [], page.id);
     save();
     dirty = false;
     stack.length = 0;
+    if (newGoals) setTimeout(() => toast(`${newGoals} ${newGoals === 1 ? 'neues Ziel' : 'neue Ziele'} unter „Ziele“`), 2800);
     tab = 'letters';
     push({ type: 'letter', id: page.id });
     toast(page.mode === 'review' ? 'Im Archiv abgelegt' : 'Gespeichert');
   }
 
   // ---------- Sammlung ----------
+  // ---------- Ziele: Ziel + Deadline + Plan + Aktion = Erfolg ----------
+  const LEVELS = {
+    fantasy: { key: 'fantasy', name: 'Fantasie', formula: 'Ziel ohne Deadline', text: 'Ein schöner Gedanke, aber ohne Termin bleibt er ein Traum. Gib ihm eine Deadline.', next: 'Deadline festlegen' },
+    intent: { key: 'intent', name: 'Vorhaben', formula: 'Ziel + Deadline', text: 'Du weißt, was und bis wann. Jetzt fehlt der Weg dorthin: ein Plan.', next: 'Plan machen' },
+    strategy: { key: 'strategy', name: 'Strategie', formula: 'Ziel + Deadline + Plan', text: 'Der Weg steht. Was fehlt, ist die erste konkrete Aktion.', next: 'Aktion festlegen' },
+    success: { key: 'success', name: 'Erfolg', formula: 'Ziel + Deadline + Plan + Aktion', text: 'Alles da. Jetzt heißt es: tun. Erledige deine Aktion und leg dann die nächste fest.', next: '' },
+  };
+  function goalLevel(g) {
+    if (!g.deadline) return LEVELS.fantasy;
+    if (!g.plan) return LEVELS.intent;
+    if (!g.action) return LEVELS.strategy;
+    return LEVELS.success;
+  }
+  const stepsOf = g => [!!g.title, !!g.deadline, !!g.plan, !!g.action];
+  function addGoals(list, letterId) {
+    let n = 0;
+    list.forEach(g => {
+      const t = (g.title || '').trim();
+      if (!t || S.goals.some(x => x.title.toLowerCase() === t.toLowerCase())) return;
+      S.goals.push({ id: uid(), title: t, deadline: g.deadline || '', plan: g.plan || '', action: g.action || '', actionDone: false,
+        status: 'active', letterId: letterId || '', createdAt: Date.now() });
+      n++;
+    });
+    return n;
+  }
+  function deadlineInfo(g) {
+    if (!g.deadline) return '';
+    const days = Math.round((d(g.deadline) - d(today())) / 86400000);
+    if (g.status === 'done') return `Deadline war ${fmtShort(g.deadline)}`;
+    if (days < 0) return `<span class="late">Deadline überschritten seit ${-days} ${days === -1 ? 'Tag' : 'Tagen'}</span>`;
+    if (days === 0) return '<span class="late">Deadline ist heute</span>';
+    return `bis ${fmtShort(g.deadline)} · noch ${days} ${days === 1 ? 'Tag' : 'Tage'}`;
+  }
+  let goalFilter = 'active';
+  let showFormula = true;
+
+  function formulaCard() {
+    const row = (lv, parts) => `<div class="f-row"><div class="f-parts">${parts.map(x => `<span class="f-p ${x ? '' : 'off'}">${x || ''}</span>`).join('')}</div><span class="lvl lvl-${lv.key}">${lv.name}</span></div>`;
+    return `<div class="card formula"><div class="f-head" data-act="toggleFormula"><span>Die Erfolgsformel</span><span class="muted">${showFormula ? 'ausblenden' : 'anzeigen'}</span></div>
+      ${showFormula ? `<div class="f-rows">
+        ${row(LEVELS.success, ['Ziel', 'Deadline', 'Plan', 'Aktion'])}
+        ${row(LEVELS.strategy, ['Ziel', 'Deadline', 'Plan', ''])}
+        ${row(LEVELS.intent, ['Ziel', 'Deadline', '', ''])}
+        ${row(LEVELS.fantasy, ['Ziel', '', '', ''])}
+      </div><p class="muted" style="font-size:13.5px;margin:14px 0 0">Eine Vision wird erst zum Erfolg, wenn sie einen Termin, einen Weg und einen ersten Schritt hat. Bei jedem Ziel siehst du, was noch fehlt.</p>` : ''}</div>`;
+  }
+
+  function goalCard(g) {
+    const lv = goalLevel(g);
+    const st = stepsOf(g);
+    const labels = ['Ziel', 'Deadline', 'Plan', 'Aktion'];
+    let foot = '';
+    if (g.status === 'done') foot = '<div class="g-next done">Erreicht</div>';
+    else if (lv.next) foot = `<div class="g-next">Nächster Schritt: <b>${lv.next}</b></div>`;
+    else if (g.actionDone) foot = '<div class="g-next">Aktion erledigt. <b>Leg die nächste fest</b></div>';
+    else foot = `<div class="g-next">Jetzt: <b>${esc(g.action)}</b></div>`;
+    return `<div class="card goal ${g.status === 'done' ? 'is-done' : ''}" data-act="openGoal" data-id="${g.id}">
+      <div class="g-top"><span class="lvl lvl-${lv.key}">${g.status === 'done' ? 'Erreicht' : lv.name}</span><span class="g-dl">${deadlineInfo(g)}</span></div>
+      <div class="g-title">${esc(g.title)}</div>
+      <div class="track">${st.map((on, i) => `<div class="tr ${on ? 'on' : ''}"><i></i><span>${labels[i]}</span></div>`).join('')}</div>
+      ${foot}</div>`;
+  }
+
+  function viewGoals() {
+    let h = `<div class="brand"><img class="logo small" src="logo.png" alt=""><h1 style="font-size:28px;text-transform:none">Ziele</h1><div class="sub">Vom Traum zum Erfolg</div></div>`;
+    h += formulaCard();
+    const active = S.goals.filter(g => g.status !== 'done');
+    const done = S.goals.filter(g => g.status === 'done');
+    h += `<div class="row" style="margin:16px 0 4px"><button class="btn" data-act="newGoal">${I.plus} Neues Ziel</button>
+      <button class="btn" data-act="findGoals" id="findGoalsBtn">${I.sparkle} In Briefen suchen</button></div>`;
+    h += `<div class="presets" style="margin-top:14px"><button data-act="gfilter" data-k="active" class="${goalFilter === 'active' ? 'on' : ''}">Aktiv (${active.length})</button>
+      <button data-act="gfilter" data-k="done" class="${goalFilter === 'done' ? 'on' : ''}">Erreicht (${done.length})</button></div>`;
+    const order = { success: 0, strategy: 1, intent: 2, fantasy: 3 };
+    const list = (goalFilter === 'done' ? done : active).slice().sort((a, b) =>
+      (a.deadline || '9999').localeCompare(b.deadline || '9999') || order[goalLevel(a).key] - order[goalLevel(b).key]);
+    if (!list.length) {
+      h += `<div class="empty"><p>${goalFilter === 'done' ? 'Noch kein Ziel als erreicht markiert.' : 'Noch keine Ziele. Leg eins an oder lass Claude in deinen Briefen danach suchen.'}</p></div>`;
+      return h;
+    }
+    return h + list.map(goalCard).join('');
+  }
+
+  function viewGoal(page) {
+    const g = page.draft;
+    const lv = goalLevel(g);
+    const src = S.letters.find(l => l.id === g.letterId);
+    let h = `<div class="topbar"><button class="iconbtn" data-act="back">${I.back}</button><h2></h2></div>`;
+    h += `<div class="detail-head"><div class="date">${g.status === 'done' ? 'Erreicht' : 'Stufe: ' + lv.name}</div><h1>${esc(g.title || 'Neues Ziel')}</h1></div>`;
+    h += `<div class="card lvl-border-${lv.key}"><div class="track big">${stepsOf(g).map((on, i) => `<div class="tr ${on ? 'on' : ''}"><i></i><span>${['Ziel', 'Deadline', 'Plan', 'Aktion'][i]}</span></div>`).join('')}</div>
+      <p style="margin:14px 0 0"><b style="font-weight:500">${lv.formula} = ${lv.name}.</b> ${lv.text}</p></div>`;
+    if (page.hint) h += `<div class="ok" style="margin-top:12px">${esc(page.hint)}</div>`;
+    h += `<div style="margin-top:20px">
+      <label class="field"><span>Ziel</span><input class="input" data-g="title" value="${esc(g.title)}" placeholder="Was willst du erreichen?"></label>
+      <label class="field"><span>Deadline</span><input class="input" type="date" data-g="deadline" value="${esc(g.deadline)}"></label>
+      <label class="field"><span>Plan</span><textarea class="input" data-g="plan" rows="5" placeholder="Die Etappen dorthin, eine pro Zeile">${esc(g.plan)}</textarea></label>
+      <label class="field"><span>Nächste Aktion</span><input class="input" data-g="action" value="${esc(g.action)}" placeholder="Was tust du als Nächstes, ganz konkret?"></label>
+      ${g.action ? `<div class="toggle" style="margin:-4px 4px 18px"><span class="muted">Aktion erledigt</span><button class="switch ${g.actionDone ? 'on' : ''}" data-act="actionDone" aria-label="Aktion erledigt"></button></div>` : ''}
+      <button class="btn block" data-act="planWithClaude" id="planBtn">${I.sparkle} Mit Claude vervollständigen</button>
+      <div class="hint" style="margin-top:8px">Claude schlägt vor, was fehlt. Du kannst alles anpassen, bevor du speicherst.</div>
+      ${src ? `<p class="muted" style="font-size:13px">Aus deinem Brief vom <a href="#" data-act="open" data-id="${src.id}">${fmtShort(src.date)}</a></p>` : ''}
+      <div class="actions"><button class="btn primary block" data-act="saveGoal">Speichern</button>
+      ${S.goals.some(x => x.id === g.id) ? `<button class="btn block" data-act="goalDone">${g.status === 'done' ? 'Wieder aktiv setzen' : 'Ziel erreicht'}</button>
+      <button class="btn block danger" data-act="deleteGoal">${I.trash} Löschen</button>` : ''}</div></div>`;
+    return h;
+  }
+  function readGoalForm(page) {
+    const v = f => { const el = $(`[data-g="${f}"]`); return el ? el.value.trim() : ''; };
+    const g = page.draft;
+    const action = v('action');
+    return { ...g, title: v('title'), deadline: v('deadline'), plan: v('plan'), action, actionDone: action === g.action ? g.actionDone : false };
+  }
+  function saveGoal(close = true) {
+    const page = stack[stack.length - 1];
+    const g = readGoalForm(page);
+    if (!g.title) { toast('Wie heißt dein Ziel?'); return false; }
+    page.draft = g;
+    const i = S.goals.findIndex(x => x.id === g.id);
+    if (i >= 0) S.goals[i] = { ...g, updatedAt: Date.now() }; else S.goals.push({ ...g, createdAt: Date.now() });
+    save();
+    dirty = false;
+    if (close) { pop(); toast(goalLevel(g).key === 'success' ? 'Gespeichert. Jetzt: tun!' : 'Gespeichert'); }
+    return true;
+  }
+  async function planWithClaude() {
+    if (!requireKey()) return;
+    const page = stack[stack.length - 1];
+    page.draft = readGoalForm(page);
+    if (!page.draft.title) { toast('Schreib zuerst dein Ziel hin.'); return; }
+    const b = $('#planBtn');
+    b.disabled = true; b.innerHTML = '<span class="spinner light"></span> Claude denkt mit …';
+    try {
+      const src = S.letters.find(l => l.id === page.draft.letterId);
+      const r = await Claude.suggestPlan(page.draft, src ? src.text : '', S.settings);
+      const g = page.draft;
+      if (!g.deadline && r.deadline) g.deadline = r.deadline;
+      if (!g.plan && r.plan) g.plan = r.plan;
+      if ((!g.action || g.actionDone) && r.action) { g.action = r.action; g.actionDone = false; }
+      page.hint = (r.hint ? r.hint + ' ' : '') + 'Prüf die Vorschläge und tipp auf Speichern.';
+      dirty = true;
+      render();
+    } catch (e) { toast(e.message, 5000); b.disabled = false; b.innerHTML = I.sparkle + ' Mit Claude vervollständigen'; }
+  }
+  async function findGoals() {
+    if (!requireKey()) return;
+    if (!S.letters.length) { toast('Noch keine Briefe da.'); return; }
+    const b = $('#findGoalsBtn');
+    b.disabled = true; b.innerHTML = '<span class="spinner light"></span> Sucht …';
+    try {
+      const found = await Claude.extractGoals(S.letters.slice().sort((a, c) => (a.date || '').localeCompare(c.date || '')), S.settings);
+      let n = 0;
+      found.forEach(g => {
+        const l = S.letters.find(x => x.date === g.letterDate);
+        n += addGoals([g], l ? l.id : '');
+      });
+      save(); render();
+      toast(n ? `${n} ${n === 1 ? 'Ziel' : 'Ziele'} gefunden` : 'Keine neuen Ziele in deinen Briefen gefunden', 4000);
+    } catch (e) { toast(e.message, 5000); render(); }
+  }
+
   function viewCollect() {
     const labels = { decisions: 'Entscheidungen', recommendations: 'Empfehlungen', insights: 'Geistesblitze' };
     let h = `<div class="brand"><img class="logo small" src="logo.png" alt=""><h1 style="font-size:28px;text-transform:none">Sammlung</h1><div class="sub">Was deine Briefe dir sagen</div><div class="orn"></div></div>`;
@@ -733,7 +911,7 @@
       render();
       const n = $('#q'); n.focus(); n.setSelectionRange(pos, pos);
     };
-    document.querySelectorAll('#app [data-f]').forEach(el => el.addEventListener('input', () => { dirty = true; }));
+    document.querySelectorAll('#app [data-f], #app [data-g]').forEach(el => el.addEventListener('input', () => { dirty = true; }));
     const ta = $('.hl-text'), back = $('.hl-back');
     if (ta && back) {
       const grow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
@@ -846,6 +1024,35 @@
         toast(want ? 'Sperre ist an' : 'Sperre ist aus');
         render(); break;
       }
+      case 'openGoal': {
+        const g = S.goals.find(x => x.id === id);
+        if (g) push({ type: 'goal', id, draft: { ...g } });
+        break;
+      }
+      case 'newGoal': { const nid = uid(); push({ type: 'goal', id: nid, draft: { id: nid, title: '', deadline: '', plan: '', action: '', actionDone: false, status: 'active', letterId: '' } }); break; }
+      case 'saveGoal': saveGoal(); break;
+      case 'planWithClaude': planWithClaude(); break;
+      case 'findGoals': findGoals(); break;
+      case 'gfilter': goalFilter = el.dataset.k; render(); break;
+      case 'toggleFormula': showFormula = !showFormula; render(); break;
+      case 'actionDone': {
+        top.draft = readGoalForm(top);
+        top.draft.actionDone = !top.draft.actionDone;
+        const on = top.draft.actionDone;
+        if (saveGoal(false)) { render(); toast(on ? 'Stark! Was ist die nächste Aktion?' : 'Wieder offen'); }
+        break;
+      }
+      case 'goalDone': {
+        top.draft = readGoalForm(top);
+        top.draft.status = top.draft.status === 'done' ? 'active' : 'done';
+        if (top.draft.status === 'done') top.draft.doneAt = Date.now();
+        const reached = top.draft.status === 'done';
+        if (saveGoal(false)) { pop(); toast(reached ? `Ziel erreicht. Glückwunsch, ${S.settings.name || 'Franky'}!` : 'Wieder aktiv'); }
+        break;
+      }
+      case 'deleteGoal':
+        confirmSheet('Ziel löschen?', 'Das Ziel verschwindet aus deiner Liste.', 'Löschen', () => { S.goals = S.goals.filter(x => x.id !== top.id); save(); dirty = false; pop(); });
+        break;
       case 'jumpUnsure': {
         const spans = [...document.querySelectorAll('.paper .unsure')];
         if (!spans.length) break;
